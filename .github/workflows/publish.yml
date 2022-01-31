@@ -1,0 +1,108 @@
+name: 'Publish'
+
+on:
+  release:
+    types: [ published ]
+
+jobs:
+  setup:
+    name: Setup node and environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Prepare node
+        uses: actions/setup-node@v2
+        with:
+          node-version: 16
+          cache: 'yarn'
+
+      - name: Download dependencies
+        run: yarn
+
+  build:
+    name: Build package
+    needs: [setup]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Prepare node
+        uses: actions/setup-node@v2
+        with:
+          node-version: 16
+          cache: 'yarn'
+
+      - name: Cache build
+        id: cacheBuild
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-build
+        with:
+          path: ./packages/**/dist
+          key: ${{ runner.os }}-${{ env.cache-name }}
+          restore-keys: ${{ runner.os }}-${{ env.cache-name }}
+
+      - name: Download dependencies
+        run: yarn
+          
+      - name: Build package
+        run: yarn build
+
+  publish:
+    name: Publish package
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Prepare node
+        uses: actions/setup-node@v2
+        with:
+          node-version: 16
+          cache: 'yarn'
+
+      - name: Cache build
+        id: cacheBuild
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-build
+        with:
+          path: ./packages/**/dist
+          key: ${{ runner.os }}-${{ env.cache-name }}
+          restore-keys: ${{ runner.os }}-${{ env.cache-name }}
+
+      - name: Download dependencies
+        run: yarn
+      
+      - name: Publish
+        uses: JS-DevTools/npm-publish@v1
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+
+      - name: Update package version
+        uses: test-room-7/action-update-file@v1
+        with:
+          file-path: 'package.json'
+          commit-msg: '[actions] ${{ github.event.release.name }} version'
+          github-token: ${{ secrets.WORKFLOW_TOKEN }}
+  
+  wrapup:
+    name: Wrap publish
+    needs: [publish]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Merge to production
+        uses: devsmasx/merge-branch@1.4.0
+        with:
+          type: now
+          from_branch: development
+          target_branch: production
+          github_token: ${{ secrets.WORKFLOW_TOKEN }}
